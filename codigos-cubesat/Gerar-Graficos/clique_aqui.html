@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Alertasat — Monitoramento Dinâmico (Separado: Climáticos / Cubo)</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
+
+  <style>
+    :root{
+      --bg:#0d0f16;
+      --panel:#1f2230;
+      --accent:#69a8ff;
+      --muted:#aab3c7;
+      --card-border: rgba(255,255,255,0.04);
+      --danger:#e74c3c;
+      --cube:#7fb3ff;
+      --climate:#ffd36b;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: "Segoe UI", Roboto, Arial, sans-serif;
+      background: linear-gradient(180deg,var(--bg) 0%, #08101a 100%);
+      color:#e6eef8;
+      min-height:100vh;
+      display:flex;
+      flex-direction:column;
+    }
+    header{
+      padding:14px 20px;
+      background: linear-gradient(90deg,#121322,#1b2336);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+    }
+    header h1{
+      margin:0;
+      font-size:20px;
+      color:var(--accent);
+      letter-spacing:1px;
+    }
+    main{
+      padding:18px;
+      max-width:1360px;
+      margin:16px auto;
+      width:96%;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+
+    .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .upload-area{background:var(--panel);border:1.6px dashed var(--accent);color:var(--accent);padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:600}
+    input[type=file]{display:none}
+    select, button{background:var(--panel);color:var(--muted);border:1px solid var(--card-border);padding:8px 10px;border-radius:8px;font-size:14px}
+    button{cursor:pointer;color:var(--accent);font-weight:600}
+
+    /* alerts box main layout */
+    #alertsBox{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:12px;
+      width:100%;
+      align-items:start;
+    }
+    .alerts-col{
+      background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));
+      border-radius:10px;
+      padding:10px;
+      border:1px solid rgba(255,255,255,0.02);
+    }
+    .alerts-col h3{margin:0 0 8px 0;font-size:15px}
+    .alert-line{padding:6px 8px;border-radius:6px;margin-bottom:6px;background:rgba(255,255,255,0.01);font-size:13px}
+
+    /* charts grid */
+    #charts{
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap:14px;
+      width:100%;
+      align-items:start;
+      position:relative;
+    }
+
+    .chart-card{
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius:12px;
+      border:1px solid var(--card-border);
+      padding:10px;
+      min-height:320px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      position:relative;
+      overflow:visible;
+    }
+    .card-top{display:flex;justify-content:space-between;gap:8px;align-items:center}
+    .metric-title{font-size:15px;font-weight:700;color:#e9f4ff}
+    .card-alerts{font-size:12px;color:var(--muted);margin-left:8px;}
+    .chart-wrap{width:100%;height:220px;background:#0f1116;border-radius:8px;padding:8px;display:flex;align-items:center}
+    canvas{width:100% !important;height:100% !important;display:block}
+
+    .stats-block{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;color:var(--muted);font-size:13px}
+    .stat-box{background: rgba(255,255,255,0.02);border-radius:8px;padding:8px;border:1px solid rgba(255,255,255,0.02)}
+    .stat-box h4{margin:0 0 6px 0;font-size:12px;color:#dff0ff;font-weight:700}
+    .stat-row{display:flex;justify-content:space-between;gap:8px;margin-bottom:4px;color:var(--muted)}
+
+    .badge-climate{background:linear-gradient(90deg,var(--climate),#ffb94d);color:#102533;padding:4px 8px;border-radius:8px;font-weight:700;font-size:12px}
+    .badge-cube{background:linear-gradient(90deg,var(--cube),#4d8bff);color:#031026;padding:4px 8px;border-radius:8px;font-weight:700;font-size:12px}
+
+    @media (max-width:880px){
+      #alertsBox{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+  <header><h1>Alertasat — Separador: Climáticos / Cubo</h1></header>
+
+  <main>
+    <div class="controls">
+      <label class="upload-area" for="fileInput">Clique ou arraste para carregar .txt
+        <input id="fileInput" type="file" accept=".txt"></label>
+
+      <label>
+        <select id="timeSelector">
+          <option value="1">Exibir a cada 1 min</option>
+          <option value="5">Exibir a cada 5 min</option>
+          <option value="10">Exibir a cada 10 min</option>
+          <option value="15">Exibir a cada 15 min</option>
+          <option value="30">Exibir a cada 30 min</option>
+        </select>
+      </label>
+
+      <div style="flex:1"></div>
+      <div style="color:var(--muted);font-size:13px">Painel: alertas climáticos (esq) e do cubo (dir). Pontos vermelhos aparecem em todos os gráficos.</div>
+    </div>
+
+    <!-- file comment -->
+    <div id="fileComment"></div>
+
+    <!-- alerts panel: 2 col -->
+    <div id="alertsBox">
+      <div class="alerts-col" id="climateAlertsCol">
+        <h3>🟥 ALERTAS CLIMÁTICOS (POPULAÇÃO)</h3>
+        <div id="climateList">Nenhum alerta climático.</div>
+      </div>
+      <div class="alerts-col" id="cubeAlertsCol">
+        <h3>🟦 ALERTAS DO CUBO (EQUIPAMENTO)</h3>
+        <div id="cubeList">Nenhum alerta do cubo.</div>
+      </div>
+    </div>
+
+    <div id="charts">
+      <div id="loadingMsg" style="color:var(--muted);font-size:15px;padding:12px;text-align:center;">Nenhum arquivo carregado.</div>
+    </div>
+  </main>
+
+<script>
+/* ---------- utilitários ---------- */
+function calcMedian(arr){ if(!arr||!arr.length) return 0; const s=[...arr].sort((a,b)=>a-b); const m=Math.floor(s.length/2); return s.length%2===0?((s[m-1]+s[m])/2):s[m]; }
+function calcMode(arr){ if(!arr||!arr.length) return null; const map={}; arr.forEach(n=>map[n]=(map[n]||0)+1); let max=0,modes=[]; for(const k in map){ if(map[k]>max){modes=[Number(k)]; max=map[k]} else if(map[k]===max){modes.push(Number(k))} } if(modes.length===Object.keys(map).length) return null; return modes; }
+function stddev(arr){ if(!arr||!arr.length) return 0; const mean=arr.reduce((a,b)=>a+b,0)/arr.length; const v=arr.reduce((sum,x)=> sum + Math.pow(x-mean,2),0)/arr.length; return Math.sqrt(v); }
+function calcStats(arr){ if(!arr||!arr.length) return {}; const cnt=arr.length; const sum=arr.reduce((a,b)=>a+b,0); const avg=sum/cnt; const med=calcMedian(arr); const modes=calcMode(arr); const mn=Math.min(...arr); const mx=Math.max(...arr); const sd=stddev(arr); function formatNumber(n){ if(n===0) return '0'; return parseFloat(n.toFixed(4)).toString().replace('.', ','); } return {count:cnt, mean:avg, median:med, mode:modes, min:mn, max:mx, std:sd, formatNumber}; }
+
+function calcResultante(x,y,z){ if (isNaN(x)||isNaN(y)||isNaN(z)) return NaN; return Math.sqrt(x*x + y*y + z*z); }
+
+/* ---------- DOM ---------- */
+const fileInput = document.getElementById('fileInput');
+const chartsDiv = document.getElementById('charts');
+const timeSelector = document.getElementById('timeSelector');
+const commentDiv = document.getElementById('fileComment');
+const climateList = document.getElementById('climateList');
+const cubeList = document.getElementById('cubeList');
+
+let chartsState = [];
+let lastOriginal = null;
+
+/* ---------- grouping XYZ ---------- */
+function groupXYZ(varLabels, dataArrays){
+  const groupsToMake = [
+    { name: "Aceleração (XYZ)", keys:["mpu Aceleracao X (m/s^2)","mpu Aceleracao Y (m/s^2)","mpu Aceleracao Z (m/s^2)"], resultLabel:"Aceleração Resultante" },
+    { name: "Giroscópio (XYZ)", keys:["mpu Giroscopio X (graus/seg)","mpu Giroscopio Y (graus/seg)","mpu Giroscopio Z (graus/seg)"], resultLabel:"Giroscópio Resultante" },
+    { name: "Magnetismo (XYZ)", keys:["mpu Magnetismo X (microteslas)","mpu Magnetismo Y (microteslas)","mpu Magnetismo Z (microteslas)"], resultLabel:"Magnetismo Resultante" }
+  ];
+
+  const finalLabels = [];
+  const finalDatasets = [];
+  const used = new Set();
+
+  for(const g of groupsToMake){
+    const idxs = g.keys.map(k=>varLabels.indexOf(k));
+    if(idxs.every(i=>i!==-1)){
+      finalLabels.push(g.name);
+      finalDatasets.push([ dataArrays[idxs[0]], dataArrays[idxs[1]], dataArrays[idxs[2]], {resultMeta:g} ]);
+      idxs.forEach(i=>used.add(i));
+    }
+  }
+
+  for(let i=0;i<varLabels.length;i++){
+    if(!used.has(i)){
+      finalLabels.push(varLabels[i]);
+      finalDatasets.push(dataArrays[i]);
+    }
+  }
+
+  return { finalLabels, finalDatasets };
+}
+
+/* ---------- aggregate ---------- */
+function aggregateData(data, step){
+  const aggregated=[];
+  if(!data||!data.length) return aggregated;
+  for(let i=0;i<data.length;i+=step){
+    const chunk=data.slice(i,i+step);
+    const avg=chunk.reduce((a,b)=>a+b,0)/chunk.length;
+    aggregated.push({value:avg, start:i, end:i+chunk.length-1});
+  }
+  return aggregated;
+}
+function makeLabelsFromAggregated(aggregated, step){
+  return aggregated.map(pt=>`${pt.start}m`);
+}
+
+/* ---------- colors ---------- */
+function paletteColor(i){ const hues=[200,40,120]; return `hsl(${hues[i%hues.length]},70%,55%)`; }
+function randomColor(){ const r=Math.floor(80+Math.random()*140); const g=Math.floor(80+Math.random()*140); const b=Math.floor(80+Math.random()*140); return `rgb(${r},${g},${b})`; }
+
+/* ---------- create chart card (with alert badge area) ---------- */
+function createChartCard(labelName, rawData, idx, step){
+  const container=document.createElement('div'); container.className='chart-card'; container.dataset.varIndex=idx;
+  const top=document.createElement('div'); top.className='card-top';
+  const leftTop=document.createElement('div'); leftTop.style.display='flex'; leftTop.style.alignItems='center';
+  const title=document.createElement('div'); title.className='metric-title'; title.textContent=labelName;
+  leftTop.appendChild(title);
+
+  // small badge area for inline alerts
+  const badgeContainer=document.createElement('div'); badgeContainer.className='card-alerts'; badgeContainer.style.marginLeft='10px';
+  leftTop.appendChild(badgeContainer);
+
+  top.appendChild(leftTop);
+
+  container.appendChild(top);
+
+  const chartWrap=document.createElement('div'); chartWrap.className='chart-wrap';
+  const canvas=document.createElement('canvas'); chartWrap.appendChild(canvas); container.appendChild(chartWrap);
+
+  // stats block
+  const statsBlock=document.createElement('div'); statsBlock.className='stats-block';
+  const aggBox=document.createElement('div'); aggBox.className='stat-box'; aggBox.innerHTML=`<h4>Agrupado</h4><div class="agg-content">Gerando...</div>`;
+  const rawBox=document.createElement('div'); rawBox.className='stat-box'; rawBox.innerHTML=`<h4>Bruto (dados originais)</h4><div class="raw-content">Gerando...</div>`;
+  statsBlock.appendChild(aggBox); statsBlock.appendChild(rawBox);
+  container.appendChild(statsBlock);
+
+  // prepare datasets
+  let datasetsForChart=[]; let labels=[]; let statsAggHTML=''; let statsRawHTML='';
+
+  if(Array.isArray(rawData) && Array.isArray(rawData[0])){
+    const isMeta = (typeof rawData[rawData.length-1] === 'object' && rawData[rawData.length-1].resultMeta);
+    const seriesArr = isMeta ? rawData.slice(0,3) : rawData;
+    const aggregatedPerSeries = seriesArr.map(arr => aggregateData(arr, step));
+    labels = aggregatedPerSeries[0] ? makeLabelsFromAggregated(aggregatedPerSeries[0], step) : [];
+
+    datasetsForChart = aggregatedPerSeries.map((aggArr,sidx)=>{
+      const vals=aggArr.map(p=>p.value);
+      return { label: `${labelName} - ${['X','Y','Z'][sidx]}`, data: vals, borderColor: paletteColor(sidx), backgroundColor: paletteColor(sidx), pointRadius: 3, pointBackgroundColor: vals.map(()=> 'rgba(255,255,255,0.0)'), borderWidth:2, tension:0.22, fill:false };
+    });
+
+    statsAggHTML = aggregatedPerSeries.map((aggArr,sidx)=>{ const vals=aggArr.map(p=>p.value); const st=calcStats(vals); return `<div style="margin-bottom:8px"><strong>${['X','Y','Z'][sidx]}</strong><div class="stat-row"><div>Cont</div><div>${st.count||0}</div></div><div class="stat-row"><div>Média</div><div>${st.formatNumber?st.formatNumber(st.mean):'—'}</div></div></div>`}).join('');
+    statsRawHTML = seriesArr.map((arr,sidx)=>{ const st=calcStats(arr); return `<div style="margin-bottom:8px"><strong>${['X','Y','Z'][sidx]}</strong><div class="stat-row"><div>Cont</div><div>${st.count||0}</div></div><div class="stat-row"><div>Média</div><div>${st.formatNumber?st.formatNumber(st.mean):'—'}</div></div></div>`}).join('');
+
+    if(isMeta){
+      const meta = rawData[rawData.length-1].resultMeta;
+      const resultRaw = [];
+      const len = seriesArr[0].length;
+      for(let i=0;i<len;i++){ resultRaw.push(calcResultante(seriesArr[0][i],seriesArr[1][i],seriesArr[2][i])); }
+      const aggResult = aggregateData(resultRaw, step);
+      const vals = aggResult.map(p=>p.value);
+      datasetsForChart.push({ label: meta.resultLabel, data: vals, borderColor: 'rgba(255,90,90,0.95)', backgroundColor:'rgba(255,90,90,0.9)', pointRadius: vals.map(()=>3), pointBackgroundColor: vals.map(()=> 'rgba(255,255,255,0.0)'), borderWidth:2, tension:0.22, fill:false });
+      const st = calcStats(vals);
+      statsAggHTML += `<div style="margin-bottom:8px"><strong>Resultante</strong><div class="stat-row"><div>Cont</div><div>${st.count||0}</div></div><div class="stat-row"><div>Média</div><div>${st.formatNumber?st.formatNumber(st.mean):'—'}</div></div></div>`;
+      statsRawHTML += `<div style="margin-bottom:8px"><strong>Resultante (bruto)</strong><div class="stat-row"><div>Cont</div><div>${calcStats(resultRaw).count||0}</div></div></div>`;
+    }
+  } else {
+    const aggregated = aggregateData(rawData, step);
+    labels = makeLabelsFromAggregated(aggregated, step);
+    const yValues = aggregated.map(p=>p.value);
+    const baseColor = randomColor();
+    datasetsForChart = [{ label: labelName, data: yValues, borderColor: baseColor, backgroundColor: baseColor, pointBackgroundColor: yValues.map(()=> 'rgba(255,255,255,0.0)'), pointRadius: yValues.map(()=>3), borderWidth:2, tension:0.22, fill:false }];
+    const statsAgg = calcStats(yValues); const statsRaw = calcStats(rawData);
+    statsAggHTML = `<div class="stat-row"><div>Contagem</div><div>${statsAgg.count||0}</div></div><div class="stat-row"><div>Média</div><div>${statsAgg.formatNumber?statsAgg.formatNumber(statsAgg.mean):'—'}</div></div>`;
+    statsRawHTML = `<div class="stat-row"><div>Contagem</div><div>${statsRaw.count||0}</div></div><div class="stat-row"><div>Média</div><div>${statsRaw.formatNumber?statsRaw.formatNumber(statsRaw.mean):'—'}</div></div>`;
+  }
+
+  aggBox.querySelector('.agg-content').innerHTML = statsAggHTML;
+  rawBox.querySelector('.raw-content').innerHTML = statsRawHTML;
+
+  const ctx = canvas.getContext('2d');
+  const chart = new Chart(ctx, {
+    type:'line',
+    data:{ labels: labels, datasets: datasetsForChart },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      plugins:{
+        legend:{ labels:{ color:'#e6eef8' } },
+        tooltip:{
+          callbacks:{ label:function(context){ return `${context.dataset.label}: ${context.formattedValue}`; } }
+        }
+      },
+      scales:{
+        x:{ ticks:{ color:'#cfdaf0' }, grid:{ color:'rgba(255,255,255,0.04)' }, title:{ display:true, text:'Minutos', color:'#9fbefc' } },
+        y:{ ticks:{ color:'#cfdaf0' }, grid:{ color:'rgba(255,255,255,0.04)' } }
+      }
+    }
+  });
+
+  interact(container).draggable({ listeners:{ move(event){ const target=event.target; const dx=(parseFloat(target.getAttribute('data-x'))||0)+event.dx; const dy=(parseFloat(target.getAttribute('data-y'))||0)+event.dy; target.style.transform=`translate(${dx}px, ${dy}px)`; target.setAttribute('data-x',dx); target.setAttribute('data-y',dy); } } })
+    .resizable({ edges:{ left:true,right:true,bottom:true,top:true }, modifiers:[ interact.modifiers.restrictSize({ min:{ width:240, height:160 } }) ] })
+    .on('resizemove', function(event){ const target=event.target; target.style.width=event.rect.width+'px'; target.style.height=event.rect.height+'px'; const x=(parseFloat(target.getAttribute('data-x'))||0)+event.deltaRect.left; const y=(parseFloat(target.getAttribute('data-y'))||0)+event.deltaRect.top; target.style.transform='translate(' + x + 'px,'+ y + 'px)'; target.setAttribute('data-x', x); target.setAttribute('data-y', y); try{ chart.resize(); }catch(e){} });
+
+  // expose references for later alert text injection and marking
+  container._chart = chart;
+  container._badge = badgeContainer;
+  container._label = labelName;
+
+  return { container, chart, rawData, step, label: labelName };
+}
+
+/* ---------- render all ---------- */
+function renderAllCharts(varLabels, dataArrays, step){
+  chartsDiv.innerHTML = '';
+  chartsState = [];
+  for(let i=0;i<dataArrays.length;i++){
+    const c = createChartCard(varLabels[i], dataArrays[i], i, step);
+    chartsState.push(c);
+    chartsDiv.appendChild(c.container);
+  }
+}
+
+/* ---------- PROCESS ALERTS (separado clima / cubo) ---------- */
+function processAltitudeAlerts(originalVarLabels, dataArrays, step){
+  lastOriginal = { varLabels: originalVarLabels.slice(), dataArrays: dataArrays.map(a=> Array.isArray(a)?a.slice():a) };
+
+  const idxOf = name => originalVarLabels.indexOf(name);
+  const idxAlt = idxOf("Altitude (m)");
+  if (idxAlt === -1) return clearAlertsAndMarks();
+
+  const idxBmpTemp = idxOf("bmp Temperatura (*C)");
+  const idxDhtTemp = idxOf("dht Temperatura (*C)");
+  const idxDhtHum = idxOf("dht Umidade (UR)");
+  const idxCO2 = idxOf("ccs CO2 (ppm)");
+  const idxTVOC = idxOf("ccs TVOC (ppb)");
+  const idxPress = idxOf("bmp Pressao (hPa)");
+  const idxAccX = idxOf("mpu Aceleracao X (m/s^2)");
+  const idxAccY = idxOf("mpu Aceleracao Y (m/s^2)");
+  const idxAccZ = idxOf("mpu Aceleracao Z (m/s^2)");
+  const idxGyX = idxOf("mpu Giroscopio X (graus/seg)");
+  const idxGyY = idxOf("mpu Giroscopio Y (graus/seg)");
+  const idxGyZ = idxOf("mpu Giroscopio Z (graus/seg)");
+  const idxMagX = idxOf("mpu Magnetismo X (microteslas)");
+  const idxMagY = idxOf("mpu Magnetismo Y (microteslas)");
+  const idxMagZ = idxOf("mpu Magnetismo Z (microteslas)");
+
+  const series=(i)=> i===-1?undefined:dataArrays[i];
+  const rawAlt = series(idxAlt);
+  if(!rawAlt || !rawAlt.length) return clearAlertsAndMarks();
+
+  const rawBmpTemp = series(idxBmpTemp);
+  const rawDhtTemp = series(idxDhtTemp);
+  const rawDhtHum = series(idxDhtHum);
+  const rawCO2 = series(idxCO2);
+  const rawTVOC = series(idxTVOC);
+  const rawPress = series(idxPress);
+  const rawAccX = series(idxAccX);
+  const rawAccY = series(idxAccY);
+  const rawAccZ = series(idxAccZ);
+  const rawGyX = series(idxGyX);
+  const rawGyY = series(idxGyY);
+  const rawGyZ = series(idxGyZ);
+  const rawMagX = series(idxMagX);
+  const rawMagY = series(idxMagY);
+  const rawMagZ = series(idxMagZ);
+
+  const agg = (arr) => arr ? aggregateData(arr, step) : aggregateData(Array(rawAlt.length).fill(NaN), step);
+
+  const aggAlt = agg(rawAlt);
+  const aggBmpTemp = agg(rawBmpTemp);
+  const aggDhtTemp = agg(rawDhtTemp);
+  const aggDhtHum = agg(rawDhtHum);
+  const aggCO2 = agg(rawCO2);
+  const aggTVOC = agg(rawTVOC);
+  const aggPress = agg(rawPress);
+  const aggAccX = agg(rawAccX);
+  const aggAccY = agg(rawAccY);
+  const aggAccZ = agg(rawAccZ);
+  const aggGyX = agg(rawGyX);
+  const aggGyY = agg(rawGyY);
+  const aggGyZ = agg(rawGyZ);
+  const aggMagX = agg(rawMagX);
+  const aggMagY = agg(rawMagY);
+  const aggMagZ = agg(rawMagZ);
+
+  const n = aggAlt.length;
+
+  // prepare chartMarks structure
+  const chartMarks = {};
+  chartsState.forEach(s=>{
+    const ds = s.chart.data.datasets.length;
+    const len = s.chart.data.labels ? s.chart.data.labels.length : n;
+    chartMarks[s.label] = { colors: Array.from({length: ds}, ()=> Array.from({length: len}, ()=> null)), radii: Array.from({length: ds}, ()=> Array.from({length: len}, ()=> null)), texts: [] };
+  });
+
+  function markChartPointByLabel(targetLabel, datasetIdx, aggIndex){
+    const entry = chartMarks[targetLabel];
+    if(!entry) return;
+    const len = entry.colors[datasetIdx].length;
+    const idx = Math.min(aggIndex, len-1);
+    entry.colors[datasetIdx][idx] = '#e74c3c';
+    entry.radii[datasetIdx][idx] = 7;
+  }
+
+  // map type -> category (climate or cube) and label name mapping for user display
+  function mapTypeToLabel(code){
+    const map={
+      'TEMP_CALOR':'Calor extremo',
+      'TEMP_FRIO':'Frio extremo',
+      'HUM_BAIXA':'Baixa umidade',
+      'HUM_ALTA':'Umidade alta',
+      'CO2_ELEVADO':'CO₂ elevado (interno)',
+      'CO2_PERIGOSO':'CO₂ perigoso (interno)',
+      'TVOC_ALTO':'TVOC alto (interno)',
+      'TVOC_CRITICO':'TVOC crítico (interno)',
+      'MAG_FORTE':'Interferência magnética forte',
+      'MAG':'Interferência magnética',
+      'GYRO_PERIGOSO':'Giro perigoso',
+      'GYRO_INSTAVEL':'Rotação instável',
+      'ACC_IMPACTO':'Impacto possível',
+      'ACC_VIBRACAO':'Vibração forte',
+      'PRESSAO_QUEDA':'Atenção: pressão caindo rapidamente',
+      'PRESSAO_TEMP_POSSIVEL':'Queda rápida de pressão (tempestade possível)',
+      'PRESSAO_TEMP_PROVAVEL':'Queda acumulada — tempestade provável',
+      'PRESSAO_BAIXA':'Pressão absoluta baixa'
+    };
+    return map[code]||code;
+  }
+
+  function isClimateType(code){
+    return ['TEMP_CALOR','TEMP_FRIO','HUM_BAIXA','HUM_ALTA','PRESSAO_QUEDA','PRESSAO_TEMP_POSSIVEL','PRESSAO_TEMP_PROVAVEL','PRESSAO_BAIXA'].includes(code);
+  }
+
+  // helper to register chart marks depending on reason
+  function registerReasonMark(reasonType, aggIdx){
+    // temperature/humidity -> mark bmp/dht temp & dht humidity
+    if(reasonType === 'TEMP_CALOR' || reasonType === 'TEMP_FRIO'){
+      if(chartMarks["bmp Temperatura (*C)"]) markChartPointByLabel("bmp Temperatura (*C)", 0, aggIdx);
+      if(chartMarks["dht Temperatura (*C)"]) markChartPointByLabel("dht Temperatura (*C)", 0, aggIdx);
+    } else if(reasonType === 'HUM_BAIXA' || reasonType === 'HUM_ALTA'){
+      if(chartMarks["dht Umidade (UR)"]) markChartPointByLabel("dht Umidade (UR)", 0, aggIdx);
+    } else if(reasonType.indexOf('PRESSAO')===0){
+      if(chartMarks["bmp Pressao (hPa)"]) markChartPointByLabel("bmp Pressao (hPa)", 0, aggIdx);
+    } else if(reasonType.indexOf('CO2')===0){
+      if(chartMarks["ccs CO2 (ppm)"]) markChartPointByLabel("ccs CO2 (ppm)", 0, aggIdx);
+    } else if(reasonType.indexOf('TVOC')===0){
+      if(chartMarks["ccs TVOC (ppb)"]) markChartPointByLabel("ccs TVOC (ppb)", 0, aggIdx);
+    } else if(reasonType.indexOf('MAG')===0){
+      if(chartMarks["Magnetismo (XYZ)"]){
+        // find resultante dataset index in that chart if exists
+        const s = chartsState.find(ss=>ss.label==="Magnetismo (XYZ)");
+        if(s && s.chart && s.chart.data && s.chart.data.datasets){
+          const ridx = s.chart.data.datasets.findIndex(ds=> ds.label && ds.label.toLowerCase().includes('resultante'));
+          const datasetIdx = ridx>=0?ridx:Math.max(0,s.chart.data.datasets.length-1);
+          markChartPointByLabel("Magnetismo (XYZ)", datasetIdx, aggIdx);
+        }
+      }
+    } else if(reasonType.indexOf('GYRO')===0){
+      const s = chartsState.find(ss=>ss.label==="Giroscópio (XYZ)");
+      if(s && s.chart && s.chart.data && s.chart.data.datasets){
+        const ridx = s.chart.data.datasets.findIndex(ds=> ds.label && ds.label.toLowerCase().includes('resultante'));
+        const datasetIdx = ridx>=0?ridx:Math.max(0,s.chart.data.datasets.length-1);
+        markChartPointByLabel("Giroscópio (XYZ)", datasetIdx, aggIdx);
+      }
+    } else if(reasonType.indexOf('ACC')===0){
+      const s = chartsState.find(ss=>ss.label==="Aceleração (XYZ)");
+      if(s && s.chart && s.chart.data && s.chart.data.datasets){
+        const ridx = s.chart.data.datasets.findIndex(ds=> ds.label && ds.label.toLowerCase().includes('resultante'));
+        const datasetIdx = ridx>=0?ridx:Math.max(0,s.chart.data.datasets.length-1);
+        markChartPointByLabel("Aceleração (XYZ)", datasetIdx, aggIdx);
+      }
+    }
+  }
+
+  // grouped alerts separately
+  const groupedClimate = {}; // label -> Set minutes
+  const groupedCube = {}; // label -> Set minutes
+
+  for(let i=0;i<n;i++){
+    const minute = aggAlt[i].start;
+    const altVal = aggAlt[i].value;
+    // consider only 0..3000
+    if(!(altVal>=0 && altVal<=3000)) continue;
+
+    const bmpT = (aggBmpTemp && aggBmpTemp[i])?aggBmpTemp[i].value:NaN;
+    const dhtT = (aggDhtTemp && aggDhtTemp[i])?aggDhtTemp[i].value:NaN;
+    let Tavg = NaN;
+    if(!isNaN(bmpT) && !isNaN(dhtT)) Tavg=(bmpT+dhtT)/2; else if(!isNaN(bmpT)) Tavg=bmpT; else if(!isNaN(dhtT)) Tavg=dhtT;
+
+    const RH = (aggDhtHum && aggDhtHum[i])?aggDhtHum[i].value:NaN;
+    const CO2 = (aggCO2 && aggCO2[i])?aggCO2[i].value:NaN;
+    const TVOC = (aggTVOC && aggTVOC[i])?aggTVOC[i].value:NaN;
+
+    const ax = (aggAccX && aggAccX[i])?aggAccX[i].value:NaN;
+    const ay = (aggAccY && aggAccY[i])?aggAccY[i].value:NaN;
+    const az = (aggAccZ && aggAccZ[i])?aggAccZ[i].value:NaN;
+    const accR = (!isNaN(ax)&&!isNaN(ay)&&!isNaN(az))?Math.sqrt(ax*ax+ay*ay+az*az):NaN;
+
+    const gx = (aggGyX && aggGyX[i])?aggGyX[i].value:NaN;
+    const gy = (aggGyY && aggGyY[i])?aggGyY[i].value:NaN;
+    const gz = (aggGyZ && aggGyZ[i])?aggGyZ[i].value:NaN;
+    const gyroR = (!isNaN(gx)&&!isNaN(gy)&&!isNaN(gz))?Math.sqrt(gx*gx+gy*gy+gz*gz):NaN;
+
+    const mx = (aggMagX && aggMagX[i])?aggMagX[i].value:NaN;
+    const my = (aggMagY && aggMagY[i])?aggMagY[i].value:NaN;
+    const mz = (aggMagZ && aggMagZ[i])?aggMagZ[i].value:NaN;
+    const magR = (!isNaN(mx)&&!isNaN(my)&&!isNaN(mz))?Math.sqrt(mx*mx+my*my+mz*mz):NaN;
+
+    const typesFound=[];
+
+    // temperature thresholds (climatic)
+    if(!isNaN(Tavg)){
+      if(Tavg>35) typesFound.push('TEMP_CALOR');
+      else if(Tavg<5) typesFound.push('TEMP_FRIO');
+    }
+
+    // humidity thresholds (climatic)
+    if(!isNaN(RH)){
+      if(RH<30) typesFound.push('HUM_BAIXA');
+      else if(RH>80) typesFound.push('HUM_ALTA');
+    }
+
+    // CO2/TVOC -> treat as cube/internal
+    if(!isNaN(CO2)){
+      if(CO2>1500) typesFound.push('CO2_PERIGOSO');
+      else if(CO2>1000) typesFound.push('CO2_ELEVADO');
+    }
+    if(!isNaN(TVOC)){
+      if(TVOC>1000) typesFound.push('TVOC_CRITICO');
+      else if(TVOC>500) typesFound.push('TVOC_ALTO');
+    }
+
+    // magnetism -> cube
+    if(!isNaN(magR)){
+      if(magR>200) typesFound.push('MAG_FORTE');
+      else if(magR>120) typesFound.push('MAG');
+    }
+
+    // gyroscope -> cube
+    if(!isNaN(gyroR)){
+      if(gyroR>500) typesFound.push('GYRO_PERIGOSO');
+      else if(gyroR>300) typesFound.push('GYRO_INSTAVEL');
+    }
+
+    // acceleration -> cube (note: includes gravity)
+    if(!isNaN(accR)){
+      if(accR>30) typesFound.push('ACC_IMPACTO');
+      else if(accR>15) typesFound.push('ACC_VIBRACAO');
+    }
+
+    // pressure trend alerts (climatic) - compute d1 and d3 in terms of hPa per block
+    if(aggPress && aggPress.length){
+      const pNow = aggPress[i] ? aggPress[i].value : NaN;
+      const pPrev1 = (i-1>=0 && aggPress[i-1])?aggPress[i-1].value:NaN;
+      const pPrev2 = (i-2>=0 && aggPress[i-2])?aggPress[i-2].value:NaN;
+      const d1 = (!isNaN(pNow) && !isNaN(pPrev1)) ? (pPrev1 - pNow) : 0; // positive when pressure falls
+      const d3 = (!isNaN(pNow) && !isNaN(pPrev2)) ? (aggPress[i-2].value - pNow) : d1;
+
+      if(d1>=3.0) typesFound.push('PRESSAO_TEMP_POSSIVEL');
+      else if(d1>=1.5) typesFound.push('PRESSAO_QUEDA');
+
+      if(d3>=5.0) typesFound.push('PRESSAO_TEMP_PROVAVEL');
+      if(!isNaN(pNow) && pNow<1000) typesFound.push('PRESSAO_BAIXA');
+    }
+
+    if(typesFound.length>0){
+      typesFound.forEach(t=>{
+        const label = mapTypeToLabel(t);
+        if(isClimateType(t)){
+          if(!groupedClimate[label]) groupedClimate[label]=new Set();
+          groupedClimate[label].add(minute);
+        } else {
+          if(!groupedCube[label]) groupedCube[label]=new Set();
+          groupedCube[label].add(minute);
+        }
+        registerReasonMark(t, i);
+      });
+    }
+  } // end for
+
+  // render grouped alerts into DOM (sorted)
+  function renderGrouped(obj, containerEl, badgeStyle){
+    const keys = Object.keys(obj);
+    if(keys.length===0){ containerEl.innerHTML = '<div>Nenhum alerta.</div>'; return; }
+    // produce lines sorted by earliest minute
+    const lines = keys.map(k=>{
+      const arr = Array.from(obj[k]); arr.sort((a,b)=>a-b);
+      return {k, arr};
+    }).sort((A,B)=> A.arr[0]-B.arr[0]);
+
+    containerEl.innerHTML = lines.map(item=> `<div class="alert-line"><strong>${item.k}:</strong> ${item.arr.join(', ')}m</div>`).join('');
+  }
+
+  renderGrouped(groupedClimate, climateList);
+  renderGrouped(groupedCube, cubeList);
+
+  // apply marks to charts and set badges above charts with relevant alert texts for that chart
+  // prepare a reverse map: for each chart label, collect alert labels and minutes relevant to it
+  const chartAlertsMap = {};
+  // initialize
+  chartsState.forEach(s=> chartAlertsMap[s.label] = []);
+
+  // iterate groupedClimate -> for each known climate alert label, map to relevant charts (bmp temp, dht temp etc.) using earlier register logic inverse
+  // We'll mark charts by checking which chartMarks have colors set by registerReasonMark
+  // Apply the prepared chartMarks to chart datasets
+  for(const s of chartsState){
+    const label = s.label;
+    const ch = s.chart;
+    const mark = chartMarks[label];
+    if(!mark) continue;
+    for(let d=0; d<ch.data.datasets.length; d++){
+      const existingColors = Array.isArray(ch.data.datasets[d].pointBackgroundColor) ? ch.data.datasets[d].pointBackgroundColor.slice() : Array.from({length: ch.data.labels.length}, ()=> 'rgba(255,255,255,0.0)');
+      const existingRadii = Array.isArray(ch.data.datasets[d].pointRadius) ? ch.data.datasets[d].pointRadius.slice() : Array.from({length: ch.data.labels.length}, ()=> 3);
+      for(let i=0;i<ch.data.labels.length;i++){
+        if(mark.colors[d][i]) existingColors[i] = mark.colors[d][i];
+        if(mark.radii[d][i]) existingRadii[i] = mark.radii[d][i];
+      }
+      ch.data.datasets[d].pointBackgroundColor = existingColors;
+      ch.data.datasets[d].pointRadius = existingRadii;
+    }
+    ch.update();
+  }
+
+  // Now set inline badges per chart listing alerts that affect that chart (we approximate by checking which minutes have marks in that chart)
+  chartsState.forEach(s=>{
+    const label = s.label;
+    const ch = s.chart;
+    const ds = ch.data.datasets;
+    const labelsLen = ch.data.labels.length;
+    const badgeArr = [];
+    // check if any point radius > default at index => fetch matching minute and map to grouped alerts
+    for(let d=0; d<ds.length; d++){
+      const radii = ds[d].pointRadius;
+      if(Array.isArray(radii)){
+        for(let i=0;i<radii.length;i++){
+          if(radii[i] && radii[i] > 4){
+            // find which grouped alerts include this minute and add textual labels
+            const minute = ch.data.labels[i] ? parseInt(ch.data.labels[i]) : i;
+            // search groupedClimate & groupedCube for entries that include this minute
+            for(const k in groupedClimate) if(groupedClimate[k].has(minute)) if(!badgeArr.includes(k)) badgeArr.push(k);
+            for(const k in groupedCube) if(groupedCube[k].has(minute)) if(!badgeArr.includes(k)) badgeArr.push(k);
+          }
+        }
+      }
+    }
+    // build HTML for badge: show at most 3 labels then "..."
+    if(badgeArr.length===0) s.container._badge.innerHTML = '';
+    else {
+      s.container._badge.innerHTML = badgeArr.slice(0,3).map(b=>{
+        // color code climate vs cube inside badge
+        const isClimate = Object.keys(groupedClimate).includes(b);
+        return `<span style="margin-right:6px;padding:3px 6px;border-radius:6px;font-size:12px;background:${isClimate? 'linear-gradient(90deg,var(--climate),#ffb94d)':'linear-gradient(90deg,var(--cube),#4d8bff)'};color:#031026">${b}</span>`;
+      }).join('') + (badgeArr.length>3 ? ` <span style="color:var(--muted)">+${badgeArr.length-3} outros</span>` : '');
+    }
+  });
+
+  // done
+}
+
+/* ---------- helpers ---------- */
+function clearAlertsAndMarks(){
+  climateList.innerHTML = 'Nenhum alerta climático.';
+  cubeList.innerHTML = 'Nenhum alerta do cubo.';
+  // clear badges
+  chartsState.forEach(s=>{ if(s.container && s.container._badge) s.container._badge.innerHTML = ''; try{ const ch=s.chart; ch.data.datasets.forEach(ds=>{ ds.pointBackgroundColor = ds.pointBackgroundColor.map? ds.pointBackgroundColor.map(()=> 'rgba(255,255,255,0.0)') : ds.pointBackgroundColor; ds.pointRadius = ds.pointRadius.map? ds.pointRadius.map(()=>3) : ds.pointRadius; }); ch.update(); }catch(e){} });
+}
+
+/* ---------- file load ---------- */
+fileInput.addEventListener('change', (ev)=>{
+  const f = ev.target.files && ev.target.files[0]; if(!f) return;
+  const fileName = f.name;
+  chartsDiv.innerHTML = `<div style="color:var(--muted);text-align:center;padding:12px">Carregando arquivo... 0%</div>`;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    const raw = e.target.result;
+    const lines = raw.split(/\r?\n/).map(l=>l.trim()).filter(l=>l!=='');
+    if(lines.length < 3){ alert('O arquivo deve conter 3 linhas: comentário, cabeçalhos e dados.'); return; }
+    const fileComment = lines[0];
+    const varLabels = lines[1].split(',').map(l=>l.trim());
+    const nVars = varLabels.length;
+    const flatData = lines[2].split(',').map(v=>Number(v.trim())).filter(v=>!isNaN(v));
+    const nSamples = Math.floor(flatData.length / nVars);
+    if(nSamples === 0){ alert('Nenhum dado numérico encontrado na linha 3.'); return; }
+    const dataArrays = Array.from({length: nVars}, ()=>[]);
+    for(let i=0;i<nSamples;i++){
+      for(let j=0;j<nVars;j++){
+        const idx = i*nVars + j;
+        if(idx < flatData.length) dataArrays[j].push(flatData[idx]);
+      }
+      if(i % Math.ceil(nSamples/100) === 0){
+        const percent = Math.floor((i/nSamples)*100);
+        chartsDiv.innerHTML = `<div style="color:var(--muted);text-align:center;padding:12px">Carregando arquivo... ${percent}%</div>`;
+      }
+    }
+
+    commentDiv.innerHTML = `<div style="font-weight:bold;margin-bottom:4px">${fileName}</div><div style="color:var(--muted);font-size:0.9em">${fileComment}</div><div style="color:var(--muted);font-size:0.8em;margin-top:4px">${nSamples} amostras carregadas, ${nVars} variáveis</div>`;
+
+    chartsDiv.innerHTML = `<div style="color:var(--muted);text-align:center;padding:12px">Carregando arquivo... 100%</div>`;
+
+    setTimeout(()=>{
+      const step = parseInt(timeSelector.value,10) || 1;
+      const grouped = groupXYZ(varLabels, dataArrays);
+      renderAllCharts(grouped.finalLabels, grouped.finalDatasets, step);
+
+      // process alerts
+      processAltitudeAlerts(varLabels, dataArrays, step);
+    }, 120);
+  };
+  reader.readAsText(f);
+});
+
+/* ---------- time selector ---------- */
+timeSelector.addEventListener('change', ()=>{
+  if(!lastOriginal) return;
+  const step = parseInt(timeSelector.value,10);
+  const varLabels = lastOriginal.varLabels;
+  const dataArrays = lastOriginal.dataArrays;
+  const grouped = groupXYZ(varLabels, dataArrays);
+  renderAllCharts(grouped.finalLabels, grouped.finalDatasets, step);
+  processAltitudeAlerts(varLabels, dataArrays, step);
+});
+</script>
+</body>
+</html>

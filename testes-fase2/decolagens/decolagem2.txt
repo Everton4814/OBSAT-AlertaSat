@@ -1,0 +1,2 @@
+Comentario/Descricao:
+Altitude (m),Bateria (%),bmp Pressao (hPa),bmp Temperatura (*C),ccs CO2 (ppm),ccs TVOC (ppb),dht Temperatura (*C),dht Umidade (UR),mpu Aceleracao X (m/s^2),mpu Aceleracao Y (m/s^2),mpu Aceleracao Z (m/s^2),mpu Giroscopio X (graus/seg),mpu Giroscopio Y (graus/seg),mpu Giroscopio Z (graus/seg),mpu Magnetismo X (microteslas),mpu Magnetismo Y (microteslas),mpu Magnetismo Z (microteslas)
